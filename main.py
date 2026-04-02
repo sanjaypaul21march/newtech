@@ -22,33 +22,44 @@ def get_tech_news():
     
     news_string = ""
     for a in articles:
-        news_string += f"- {a['title']}\n"
+        # Use .get() to avoid errors if a title is missing
+        title = a.get('title', 'No Title')
+        news_string += f"- {title}\n"
     return news_string
 
 def summarize_with_gemini(text):
     """Direct POST request to Gemini V1 Stable API"""
-    # We use '/v1/' here to avoid the 'v1beta' 404 error
     url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
     
     payload = {
         "contents": [{
-            "parts": [{"text": f"Summarize these tech headlines into a professional daily morning briefing. Focus on new product launches and big tech updates:\n\n{text}"}]
+            "parts": [{"text": f"Summarize these tech headlines into a professional briefing. Focus on launches and big tech updates:\n\n{text}"}]
         }]
     }
     
     headers = {'Content-Type': 'application/json'}
+    # We use response.text to ensure we get a string
     response = requests.post(url, headers=headers, data=json.dumps(payload))
     
     if response.status_code != 200:
-        return f"AI Summary Error: {response.text}"
+        return f"AI Summary Error: {response.status_code} - {response.text}"
     
     result = response.json()
-    return result['candidates'][0]['content']['parts'][0]['text']
+    
+    try:
+        # We force the output to be a string to avoid the TypeError
+        summary_text = str(result['candidates'][0]['content']['parts'][0]['text'])
+        return summary_text
+    except (KeyError, IndexError):
+        return "Error: Could not parse the AI response. Check API logs."
 
 def send_email(body):
     """Send the final email via Gmail"""
+    # Force body to string just in case
+    content = str(body)
+    
     msg = EmailMessage()
-    msg.set_content(body)
+    msg.set_content(content)
     msg['Subject'] = f"🚀 Tech Daily: {datetime.now().strftime('%d %b %Y')}"
     msg['From'] = SENDER
     msg['To'] = RECEIVER
@@ -61,7 +72,7 @@ if __name__ == "__main__":
     print("Step 1: Fetching News...")
     raw_news = get_tech_news()
     
-    print("Step 2: Summarizing with Gemini V1...")
+    print("Step 2: Summarizing with Gemini...")
     summary = summarize_with_gemini(raw_news)
     
     print("Step 3: Sending Email...")
