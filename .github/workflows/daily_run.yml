@@ -1,7 +1,7 @@
 name: Daily 6AM Tech News
 on:
   schedule:
-    - cron: '30 0 * * *' # 00:30 UTC is 06:00 AM IST
+    - cron: '30 17 * * *' # 00:30 UTC is 06:00 AM IST
 jobs:
   build:
     runs-on: ubuntu-latest
