@@ -26,7 +26,8 @@ def get_tech_news():
 
 def summarize_news(raw_news):
     """Use Gemini to create a professional summary."""
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    #model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash-latest") 
     prompt = f"""
     You are a professional tech journalist. Summarize the following news headlines into a clean, 
     bulleted daily briefing. Focus on 'New Launches' and 'Big Tech breakthroughs'. 
