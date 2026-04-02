@@ -1,62 +1,69 @@
 import os
 import requests
-import google.generativeai as genai
+import json
 import smtplib
 from email.message import EmailMessage
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Load credentials
+# 1. Load your Secrets
 load_dotenv()
-#genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"), transport='rest')
+NEWS_KEY = os.getenv("NEWS_API_KEY")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+SENDER = os.getenv("SENDER_EMAIL")
+PASSWORD = os.getenv("EMAIL_PASS")
+RECEIVER = os.getenv("RECEIVER_EMAIL")
 
 def get_tech_news():
-    """Fetch top tech headlines from the last 24 hours."""
-    url = f"https://newsapi.org/v2/top-headlines?category=technology&language=en&apiKey={os.getenv('NEWS_API_KEY')}"
+    """Fetch headlines from NewsAPI"""
+    url = f"https://newsapi.org/v2/top-headlines?category=technology&language=en&apiKey={NEWS_KEY}"
     response = requests.get(url).json()
+    articles = response.get("articles", [])[:10]
     
-    if response.get("status") != "ok":
-        return "Error fetching news."
-    
-    articles = response.get("articles", [])[:15] # Take top 15 stories
-    news_text = ""
-    for i, art in enumerate(articles, 1):
-        news_text += f"{i}. {art['title']} - {art['description']}\n"
-    return news_text
+    news_string = ""
+    for a in articles:
+        news_string += f"- {a['title']}\n"
+    return news_string
 
-def summarize_news(raw_news):
-    """Use Gemini to create a professional summary."""
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    #model = genai.GenerativeModel("gemini-1.5-flash-latest") 
-    prompt = f"""
-    You are a professional tech journalist. Summarize the following news headlines into a clean, 
-    bulleted daily briefing. Focus on 'New Launches' and 'Big Tech breakthroughs'. 
-    Keep it concise and readable for a 6:00 AM email.
+def summarize_with_gemini(text):
+    """Direct POST request to Gemini V1 Stable API"""
+    # We use '/v1/' here to avoid the 'v1beta' 404 error
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
     
-    NEWS DATA:
-    {raw_news}
-    """
-    response = model.generate_content(prompt)
-    return response.text
+    payload = {
+        "contents": [{
+            "parts": [{"text": f"Summarize these tech headlines into a professional daily morning briefing. Focus on new product launches and big tech updates:\n\n{text}"}]
+        }]
+    }
+    
+    headers = {'Content-Type': 'application/json'}
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    
+    if response.status_code != 200:
+        return f"AI Summary Error: {response.text}"
+    
+    result = response.json()
+    return result['candidates'][0]['content']['parts'][0]['text']
 
-def send_email(summary):
-    """Send the final summary via Gmail."""
+def send_email(body):
+    """Send the final email via Gmail"""
     msg = EmailMessage()
-    msg.set_content(summary)
-    msg['Subject'] = f"🚀 Tech Briefing: {datetime.now().strftime('%d %b %Y')}"
-    msg['From'] = os.getenv("SENDER_EMAIL")
-    msg['To'] = os.getenv("RECEIVER_EMAIL")
+    msg.set_content(body)
+    msg['Subject'] = f"🚀 Tech Daily: {datetime.now().strftime('%d %b %Y')}"
+    msg['From'] = SENDER
+    msg['To'] = RECEIVER
 
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-        smtp.login(os.getenv("SENDER_EMAIL"), os.getenv("EMAIL_PASS"))
+        smtp.login(SENDER, PASSWORD)
         smtp.send_message(msg)
 
 if __name__ == "__main__":
-    print("Fetching news...")
-    raw_data = get_tech_news()
-    print("Summarizing...")
-    final_summary = summarize_news(raw_data)
-    print("Sending email...")
-    send_email(final_summary)
-    print("Done!")
+    print("Step 1: Fetching News...")
+    raw_news = get_tech_news()
+    
+    print("Step 2: Summarizing with Gemini V1...")
+    summary = summarize_with_gemini(raw_news)
+    
+    print("Step 3: Sending Email...")
+    send_email(summary)
+    print("Success! Check your inbox.")
